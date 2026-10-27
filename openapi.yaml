@@ -1,0 +1,293 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: Directory and lead-capture API for C4R / C4C Transition Support
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: directory
+    description: Public directory and lead capture
+  - name: admin
+    description: Protected staff lead review
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+  /listings:
+    get:
+      operationId: listDirectoryListings
+      tags: [directory]
+      summary: Get curated listings
+      responses:
+        "200":
+          description: Curated property and care listings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListingsResponse"
+  /intakes:
+    post:
+      operationId: createInitialIntake
+      tags: [directory]
+      summary: Record a visitor's initial directory access intake
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IntakeInput"
+      responses:
+        "201":
+          description: Intake recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Intake"
+        "400":
+          description: Invalid intake
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /reservations:
+    post:
+      operationId: createReservationRequest
+      tags: [directory]
+      summary: Submit a reservation or information request
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReservationInput"
+      responses:
+        "201":
+          description: Reservation request recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Reservation"
+        "400":
+          description: Invalid reservation request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Intake or listing not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /admin/leads:
+    get:
+      operationId: listAdminLeads
+      tags: [admin]
+      summary: List all leads for authorized staff
+      security:
+        - clerkSession: []
+      responses:
+        "200":
+          description: Leads with any associated reservation request, newest first
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminLeadsResponse"
+        "401":
+          description: Sign-in required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Staff access required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+components:
+  securitySchemes:
+    clerkSession:
+      type: apiKey
+      in: cookie
+      name: __session
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+    Listing:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        location:
+          type: string
+        unitType:
+          type: string
+        category:
+          type: string
+        description:
+          type: string
+        highlights:
+          type: array
+          items:
+            type: string
+        imageUrl:
+          type: string
+        illustrative:
+          type: boolean
+      required: [id, name, location, unitType, category, description, highlights, imageUrl, illustrative]
+    ListingsResponse:
+      type: array
+      items:
+        $ref: "#/components/schemas/Listing"
+    IntakeInput:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+      required: [email]
+    Intake:
+      type: object
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, email, createdAt]
+    ReservationInput:
+      type: object
+      properties:
+        intakeId:
+          type: integer
+          minimum: 1
+        listingId:
+          type: string
+          minLength: 1
+        preferredMoveInDate:
+          type: string
+          format: date
+        situation:
+          type: string
+          minLength: 2
+          maxLength: 2000
+        preferredContactMethod:
+          type: string
+          enum: [phone, text, email]
+        contactPhone:
+          type: string
+          minLength: 7
+          maxLength: 30
+        privacyConsentGiven:
+          type: boolean
+          description: The submitter explicitly consented to sharing request details with the support team.
+      required: [intakeId, listingId, preferredMoveInDate, situation, preferredContactMethod, privacyConsentGiven]
+    Reservation:
+      type: object
+      properties:
+        id:
+          type: integer
+        intakeId:
+          type: integer
+        listingId:
+          type: string
+        preferredMoveInDate:
+          type: string
+          format: date
+        situation:
+          type: string
+        preferredContactMethod:
+          type: string
+          enum: [phone, text, email]
+        createdAt:
+          type: string
+          format: date-time
+        confirmation:
+          type: string
+      required: [id, intakeId, listingId, preferredMoveInDate, situation, preferredContactMethod, createdAt, confirmation]
+    AdminLead:
+      type: object
+      properties:
+        id:
+          type: integer
+        fullName:
+          oneOf:
+            - type: string
+            - type: "null"
+        email:
+          type: string
+        phone:
+          oneOf:
+            - type: string
+            - type: "null"
+        createdAt:
+          type: string
+          format: date-time
+        reservation:
+          oneOf:
+            - $ref: "#/components/schemas/AdminReservation"
+            - type: "null"
+      required: [id, fullName, email, phone, createdAt, reservation]
+    AdminReservation:
+      type: object
+      properties:
+        id:
+          type: integer
+        listingId:
+          type: string
+        listingName:
+          type: string
+        preferredMoveInDate:
+          type: string
+          format: date
+        situation:
+          type: string
+        preferredContactMethod:
+          type: string
+          enum: [phone, text, email]
+        contactPhone:
+          oneOf:
+            - type: string
+            - type: "null"
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, listingId, listingName, preferredMoveInDate, situation, preferredContactMethod, contactPhone, createdAt]
+    AdminLeadsResponse:
+      type: array
+      items:
+        $ref: "#/components/schemas/AdminLead"
+
